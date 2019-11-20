@@ -1,0 +1,11 @@
+logger:
+  qualname: echo
+
+flask:
+  host: 127.0.0.1
+  port: 15127
+  debug: true
+  static_folder: ../static
+
+scan:
+  root_dir: d:/echo
