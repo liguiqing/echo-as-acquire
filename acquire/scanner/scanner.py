@@ -5,14 +5,18 @@ import acquire.scanner.twain as twain
 from config import logger
 
 
+def _submit_image_data(handler, image_data):
+    logger.debug('Handler an image %s' % image_data)
+    handler.notify(image_data)
+
+
 class ScannerIsNotReady(Exception):
     pass
+
 
 class StatusIsNotAllowed(Exception):
     pass
 
-def default_scan_finished():
-    logger.debug('Scan finished')
 
 @unique
 class PixelType(Enum):
@@ -28,57 +32,59 @@ class ScannerConfig:
         self.pixel_type = PixelType.GRAY.value
         self.img_format = "bmp"
 
+
 class Scanner(Facility):
     """采集设备--扫描仪
-   扫描仪采用twain驱动连接
-   扫描一张图像完成后，输出为bmp图像字节流
 
-   Attributes:
+    扫描一张图像完成后，并输出bmp图像字节流到handler中
+
+    Attributes:
        sd: twain.Source
        product_name：扫描仪在设备管理器中的名称
        config: 扫描参数配置
        has_capabilited： 是否已经进行扫描参数设置
-       batch：所属扫描批次
-       scan_finished：批次扫描完成后的回调函数
-    
+       handler：图像处理器
+
     """
     sd = None
     product_name = 'EPSON DS-510'
     config = None
     has_capabilited = False
-    batch = None
+    handler = None
     scan_finished = None
 
-    def __init__(self, sd, scan_finished=None):
+    def __init__(self, sd):
         """Construct of Scanner
         Args:
             sd: a instance of twain.Source
-            scan_finished: 完成一次扫描后回调函数 default is default_scan_finished
-
         """
         self.sd = sd
         self.config = ScannerConfig()
-        self.scan_finished = scan_finished if scan_finished else default_scan_finished
+        self.batch_finished = lambda:logger.debug('Scan finished')
         self._scanning = False
         self._last_image_info = None
+        self.failure_callback = lambda : logger.warn("Scanning failure!")
         
-    def set_scan_finished(self, scan_finished):
-        self.scan_finished = scan_finished
+    def set_batch_finished(self, batch_finished):
+        self.scan_finished = batch_finished if batch_finished else lambda:logger.debug('Scan finished')
+
+    def set_failure_callback(self,failure_callback):
+        self.failure_callback = failure_callback if failure_callback else lambda:logger.debug('Scan finished')
 
     def processXFer1(self):
         (handle, more_to_come) = self.sd.xfer_image_natively()
         stream = twain.dib_to_bm_file(handle)
-        self.batch.append(stream,image_info=self._last_image_info)
-
+        self.handler.notify({'data':stream, 'desc':None})
+ 
         if more_to_come: 
             self.processXFer1()
         else:
             self._clean()
 
     def processXFer(self):
+        # TODO 数量会少，扫一张的时候会出现读取下一张的提示
         def before(image_info):
             self._last_image_info = image_info
-            logger.debug("Acquire image's spec {}".format(self._last_image_info))
 
         def after(image,more_to_come):
             if not more_to_come: 
@@ -86,9 +92,12 @@ class Scanner(Facility):
             else:
                 stream = image.to_bytes()
                 image.close()
-                self.batch.append(stream,image_info=self._last_image_info)
+                self.handler.notify({'data':stream, 'desc':self._last_image_info})
             
         self.sd.acquire_natively(after,before=lambda image_info:before(image_info),show_ui=False)
+    
+    def _publish_image(self,image):
+
 
     def set_args(self, config):
         """设置扫描仪参数
@@ -114,7 +123,13 @@ class Scanner(Facility):
         except StatusIsNotAllowed:
             pass
 
-    def play(self, batch = None):
+    def play(self, image_handler=None):
+        """进行扫描
+        
+        Args:
+            handler: 图像处理器
+        
+        """
         if self.sd is None :
             raise ScannerIsNotReady
         
@@ -127,20 +142,36 @@ class Scanner(Facility):
             self.set_args(ScannerConfig())
             self.has_capabilited = True
 
-        self.batch = batch if batch else BatchMocker()
+        self.handler = image_handler if image_handler else ImageHandler()
         logger.debug("Scan starting ...")
         self.sd.request_acquire(0, 0)
-        self.processXFer()
+        try:
+            self.processXFer1()
+        except Exception as e:
+            logger.error(e)
+            self._clean(succed=False)
 
     def terminate(self):
         self.sd.destroy()
         self.sd=None
     
-    def _clean(self):
-        self._last_image_info = None
-        self.scan_finished()
-        self._scanning = False
+    def status(self):
+        """扫描仪状态
+        
+        Returns:
+            dict as {'connected':True,'code':10001}
+        """
+        return {'connected':True,'code':10001}
 
-class BatchMocker:
-    def append(self, stream, image_info):
-        logger.debug('Acquire image {}'.format(image_info))
+    def _clean(self,succed=True):
+        self._last_image_info = None
+        self._scanning = False
+        if succed:
+            self.scan_finished()
+        else:
+            self.failure_callback()    
+
+
+class ImageHandler:
+    def notify(self, image):
+        logger.debug('Handler image %s',image['desc'])

@@ -1,5 +1,5 @@
 import os
-from acquire.facility import Facility,FacilityFactory,FacilityFactoryMocker
+from acquire.facility import Facility,FacilityFactory,VirtualFacilityFactory
 from config import logger
 
 facilities = {}
@@ -27,22 +27,40 @@ def _register_facility_components(dir):
                     raise e
 
 def facility_register(facility):
-    if not hasattr(facility,'type'):
+    """采集设备注册"""
+    if not hasattr(facility,'name'):
         return
 
-    facilities[facility.type] = facility
+    facilities[facility.name] = facility
 
 
 def get_facilities_connected():
-    connecteds = {}
-    return {'scanner':['EPSON DS-510']}
+    """取得所有已经安装的采集设备
+    
+    Returns:
+        type of list as :
+        [{'facility_name':['F1','F2']}]
+    """
+    return [{'name':k, 'instances':facilities[k].list_installed()} for k in facilities.keys()]
 
 
-def get_facility(type='mocker'):
+def get_facility(category_name=None):
+    """取得名为category_name的采集设备
+    
+    Arags:
+        category_name: 设备分类名称
+
+    Returns:
+        A instance of FacilityFactory
+    """
+    if category_name is None:
+        return VirtualFacilityFactory()
+
     for k,v in facilities.items():
-        if k == type:
+        if k == category_name:
             return v
-    return FacilityFactoryMocker()        
+
+    return VirtualFacilityFactory()        
 
 
 def install():
