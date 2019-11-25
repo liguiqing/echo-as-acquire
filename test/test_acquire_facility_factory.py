@@ -3,7 +3,7 @@ from unittest import TestCase
 
 from acquire.acquire_facility_factory import (facilities, facility_register, get_facility,install,get_facilities_connected)
 from acquire.facility import VirtualFacilityFactory
-from config import logger
+from glo import logger
 
 
 class TestAcquireFacilityFactory(TestCase):

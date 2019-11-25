@@ -1,4 +1,4 @@
-from config import logger
+import glo
 
 class Facility:
     """采集设备
@@ -106,7 +106,7 @@ class VirtualFacilityFactory(FacilityFactory):
         return Facility()
 
     def close(self):
-        logger.debug('Acquire facility closed')
+        glo.logger.debug('Acquire facility closed')
 
     def terminate(self):
-        logger.debug('Acquire facility terminate')
+        glo.logger.debug('Acquire facility terminate')

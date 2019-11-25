@@ -9,3 +9,4 @@ flask:
 
 scan:
   root_dir: d:/echo
+  asyn: false

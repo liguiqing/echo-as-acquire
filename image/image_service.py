@@ -8,4 +8,3 @@ def get_image_handler(data):
     """
     # TODO
     return BatchHanlder()
-

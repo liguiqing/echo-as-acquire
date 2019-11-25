@@ -1,6 +1,6 @@
 import os
 from acquire.facility import Facility,FacilityFactory,VirtualFacilityFactory
-from config import logger
+import glo
 
 facilities = {}
 
@@ -19,6 +19,7 @@ def _register_facility_components(dir):
                 s = absfile.index('acquire') + 8
                 e = absfile.index('.py')
                 python = absfile[s: e].replace(os.sep,'.')
+                glo.logger.debug("Load acquire.facility component %s " % python)
                 dmf = __import__(python,fromlist = True)
                 try:
                     func = getattr(dmf,'register')

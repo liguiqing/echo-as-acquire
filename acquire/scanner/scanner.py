@@ -2,13 +2,7 @@ from enum import Enum, unique
 
 from acquire.facility import Facility
 import acquire.scanner.twain as twain
-from config import logger
-
-
-def _submit_image_data(handler, image_data):
-    logger.debug('Handler an image %s' % image_data)
-    handler.notify(image_data)
-
+import glo
 
 class ScannerIsNotReady(Exception):
     pass
@@ -60,22 +54,21 @@ class Scanner(Facility):
         """
         self.sd = sd
         self.config = ScannerConfig()
-        self.batch_finished = lambda:logger.debug('Scan finished')
+        self.batch_finished = lambda:glo.logger.debug('Scan finished')
         self._scanning = False
         self._last_image_info = None
-        self.failure_callback = lambda : logger.warn("Scanning failure!")
+        self.failure_callback = lambda : glo.logger.warn("Scanning failure!")
         
     def set_batch_finished(self, batch_finished):
-        self.scan_finished = batch_finished if batch_finished else lambda:logger.debug('Scan finished')
+        self.scan_finished = batch_finished if batch_finished else lambda:glo.logger.debug('Scan finished')
 
     def set_failure_callback(self,failure_callback):
-        self.failure_callback = failure_callback if failure_callback else lambda:logger.debug('Scan finished')
+        self.failure_callback = failure_callback if failure_callback else lambda:glo.logger.debug('Scan finished')
 
     def processXFer1(self):
         (handle, more_to_come) = self.sd.xfer_image_natively()
         stream = twain.dib_to_bm_file(handle)
-        self.handler.notify({'data':stream, 'desc':None})
- 
+        self._publish_image({'stream':stream, 'desc':None})
         if more_to_come: 
             self.processXFer1()
         else:
@@ -92,12 +85,19 @@ class Scanner(Facility):
             else:
                 stream = image.to_bytes()
                 image.close()
-                self.handler.notify({'data':stream, 'desc':self._last_image_info})
+                self._publish_image({'stream':stream, 'desc':self._last_image_info})
             
         self.sd.acquire_natively(after,before=lambda image_info:before(image_info),show_ui=False)
     
     def _publish_image(self,image):
-
+        def submit(data):
+            self.handler.put(data)
+        if glo.app_conf['scan']['asyn']:
+            glo.logger.debug("Asyn submit an image %s" % image['desc'])
+            glo.thread_excutor.submit(submit,image)
+        else:
+            glo.logger.debug("Sync submit an image %s" % image['desc'])
+            submit(image)
 
     def set_args(self, config):
         """设置扫描仪参数
@@ -143,12 +143,12 @@ class Scanner(Facility):
             self.has_capabilited = True
 
         self.handler = image_handler if image_handler else ImageHandler()
-        logger.debug("Scan starting ...")
+        glo.logger.debug("Scan starting ...")
         self.sd.request_acquire(0, 0)
         try:
             self.processXFer1()
         except Exception as e:
-            logger.error(e)
+            glo.logger.error("Scan Error {0}".format(e))
             self._clean(succed=False)
 
     def terminate(self):
@@ -173,5 +173,5 @@ class Scanner(Facility):
 
 
 class ImageHandler:
-    def notify(self, image):
-        logger.debug('Handler image %s',image['desc'])
+    def put(self, image):
+        glo.logger.debug('Handler image %s',image['desc'])

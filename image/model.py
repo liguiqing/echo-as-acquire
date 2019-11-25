@@ -8,7 +8,7 @@ from queue import Queue
 
 from PIL import Image
 
-from config import app_conf, logger
+import glo
 
 
 class Img:
@@ -43,7 +43,7 @@ def default_named_image_file(total,two_sided=False):
         return str(math.ceil(total/2)) + '_' + str(remain)
 
 def default_image_writed(img):
-    logger.debug("Image writed {}".format(img.__dict__))
+    glo.logger.debug("Image writed {}".format(img.__dict__))
 
 
 class BatchHanlder:
@@ -66,17 +66,18 @@ class BatchHanlder:
 
     def __init__(self, is_two_sided=False, target_format='jpg', named_batch_folder=None,
             named_image_file=None, image_writed=None):
-        self._root_dir = app_conf['scan']['root_dir']
+        self._root_dir = glo.app_conf['scan']['root_dir']
         self._is_two_sided = is_two_sided
         self._target_format = target_format
         self.named_batch_folder = named_batch_folder if named_batch_folder else default_named_batch_folder
         self.named_image_file = named_image_file if named_image_file else default_named_image_file
         self.image_writed = image_writed if image_writed else default_image_writed
 
-    def notify(self,image_data):
+    def put(self,image_data):
         self._add()
-        logger.debug("Handler a image data %s" % image_data['desc'])
-        img  = Image.open(io.BytesIO(image_data['data']))
+
+        glo.logger.debug('Handler a image data ' + str(image_data['desc']))
+        img  = Image.open(io.BytesIO(image_data['stream']))
         self._to_disk(img)
 
     def _to_disk(self,img):
@@ -84,9 +85,12 @@ class BatchHanlder:
             self._create_folder(self.named_batch_folder())
 
         file_name = self.named_image_file(self.total,self._is_two_sided)
-        absolute_path = os.path.join(self.folder, "{}.{}".format(file_name,self._target_format))
+        image_file_name = "{}.{}".format(file_name,self._target_format)
+        absolute_path = os.path.join(self._root_dir,self.folder, image_file_name)
+        glo.logger.debug('Image {} saving'.format(absolute_path))
         img.save(absolute_path)
-        pic = Img(absolute_path)
+        glo.logger.debug('Image {} saved'.format(absolute_path))
+        pic = Img( os.path.join(self.folder, image_file_name))
         self.imgs.append(pic)
         self.image_writed(pic)
 
@@ -108,4 +112,14 @@ class BatchHanlder:
         absolute_folder = os.path.join(self._root_dir,folder)
         if not os.path.exists(absolute_folder):
             os.makedirs(absolute_folder)
-        self.folder = absolute_folder
+        self.folder = folder
+    
+    def set_image_writed(self,image_writed):
+        """set function when an image writed
+
+        Args:
+            image_writed: a function when image writed
+
+        """
+        if image_writed is not None:
+            self.image_writed = image_writed

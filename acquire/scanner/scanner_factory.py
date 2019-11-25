@@ -6,7 +6,7 @@ from datetime import datetime
 from acquire.facility import FacilityFactory
 import acquire.scanner.twain as twain
 from acquire.scanner.scanner import Scanner
-from config import logger
+import glo
 
 
 class ScannerFactory(FacilityFactory):
@@ -28,7 +28,7 @@ class ScannerFactory(FacilityFactory):
     def get_connected(self, product_name=None, image_acquired=None):
         if not product_name:
             product_name = self.SM.source_list[0]
-        logger.debug("Get scanner %s", product_name, exc_info=1)
+        glo.logger.debug("Get scanner %s", product_name, exc_info=1)
         if product_name in self.scanners:
             return self.scanners[product_name]
 

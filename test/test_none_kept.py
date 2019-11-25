@@ -2,18 +2,13 @@ from concurrent.futures import ProcessPoolExecutor,ThreadPoolExecutor
 
 import unittest
 from unittest import TestCase
-from config import logger
+from glo import logger
 
 class TestNoneKept(TestCase):
     
-    def test_multy_thread(self):
-        logger.debug('TestNoneKept.test_multy_procesor')
-        def func1(input):
-            logger.debug('func1 input %s' % input)
-
-        excutor = ThreadPoolExecutor()
-        for x in range(100):
-            logger.debug('X %d' % x)
-            excutor.submit(func1,x)
-        # excutor.shutdown(wait=True)
-        logger.debug('Over')
+    def test_code(self):
+        logger.debug('test_code')
+        str = '20191125085018/909/1.jpg'
+        s=str[0:str.rindex('/')]
+        s1=str[len(s)+1:len(str)]
+        logger.debug(s)

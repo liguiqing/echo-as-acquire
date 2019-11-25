@@ -5,14 +5,14 @@ from unittest import TestCase
 
 from acquire.scanner.scanner_factory import ScannerFactory
 from acquire.scanner.scanner import Scanner
-from config import logger
+from glo import logger
 from image.image_service import get_image_handler
 
         
 class Total:
     def __init__(self):
         self.total = 0
-    def notify(self, image):
+    def put(self, image):
         self.total = self.total + 1
         
 
