@@ -1,8 +1,9 @@
+from concurrent.futures import ProcessPoolExecutor
 from enum import Enum, unique
 
 from acquire.facility import Facility
 import acquire.scanner.twain as twain
-import glo
+from glo import logger,app_conf
 
 class ScannerIsNotReady(Exception):
     pass
@@ -54,16 +55,16 @@ class Scanner(Facility):
         """
         self.sd = sd
         self.config = ScannerConfig()
-        self.batch_finished = lambda:glo.logger.debug('Scan finished')
+        self.batch_finished = lambda:logger.debug('Scan finished')
         self._scanning = False
         self._last_image_info = None
-        self.failure_callback = lambda : glo.logger.warn("Scanning failure!")
+        self.failure_callback = lambda : logger.warn("Scanning failure!")
         
     def set_batch_finished(self, batch_finished):
-        self.scan_finished = batch_finished if batch_finished else lambda:glo.logger.debug('Scan finished')
+        self.scan_finished = batch_finished if batch_finished else lambda:logger.debug('Scan finished')
 
     def set_failure_callback(self,failure_callback):
-        self.failure_callback = failure_callback if failure_callback else lambda:glo.logger.debug('Scan finished')
+        self.failure_callback = failure_callback if failure_callback else lambda:logger.debug('Scan finished')
 
     def processXFer1(self):
         (handle, more_to_come) = self.sd.xfer_image_natively()
@@ -90,26 +91,19 @@ class Scanner(Facility):
         self.sd.acquire_natively(after,before=lambda image_info:before(image_info),show_ui=False)
     
     def _publish_image(self,image):
-        def submit(data):
-            self.handler.put(data)
-        if glo.app_conf['scan']['asyn']:
-            glo.logger.debug("Asyn submit an image %s" % image['desc'])
-            glo.thread_excutor.submit(submit,image)
-        else:
-            glo.logger.debug("Sync submit an image %s" % image['desc'])
-            submit(image)
+        self.handler.put(image)
 
-    def set_args(self, config):
+    def set_args(self, config:ScannerConfig):
         """设置扫描仪参数
+
         Args: 
             coinfig: instance ScannerConfig
-
         """
         self.config = config
         dpi = config.dpi if hasattr(config,'dpi') else 150
         bpp = config.bpp if hasattr(config,'bpp') else 8
         pixel_type = config.pixel_type if hasattr(config,'pixel_type') else PixelType.GRAY.value
-        
+        # TODO 还有很多参数设置没有实现，如双面扫描，彩色扫描等，慢慢研究吧
         try:
             self.sd.set_capability(twain.ICAP_PIXELTYPE, twain.TWTY_UINT16, pixel_type)
             self.sd.set_capability(twain.ICAP_UNITS, twain.TWTY_UINT16, twain.TWUN_INCHES)
@@ -143,12 +137,22 @@ class Scanner(Facility):
             self.has_capabilited = True
 
         self.handler = image_handler if image_handler else ImageHandler()
-        glo.logger.debug("Scan starting ...")
+        logger.debug("Scan starting ...")
         self.sd.request_acquire(0, 0)
-        try:
+        
+        def do_pay():
             self.processXFer1()
+
+        try:
+            if app_conf['scan']['asyn']:
+                # TODO 使用异步无法读取图片，而且程序会卡死
+                logger.debug('Asyn scan an ')
+                with ProcessPoolExecutor() as excutor:
+                    excutor.submit(do_pay)
+            else:
+                do_pay()
         except Exception as e:
-            glo.logger.error("Scan Error {0}".format(e))
+            logger.error('Scan Error {0}'.format(e))
             self._clean(succed=False)
 
     def terminate(self):
@@ -174,4 +178,4 @@ class Scanner(Facility):
 
 class ImageHandler:
     def put(self, image):
-        glo.logger.debug('Handler image %s',image['desc'])
+        logger.debug('Handler image %s',image['desc'])

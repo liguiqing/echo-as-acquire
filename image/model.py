@@ -56,7 +56,6 @@ class BatchHanlder:
         total:
         folder:
         imgs
-      
     """
     operator = 'Anon'
     scan_time = datetime.now()

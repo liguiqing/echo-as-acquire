@@ -13,8 +13,8 @@ import gevent
 from flask import Flask, jsonify, request,send_from_directory
 from flask_socketio import SocketIO, emit
 
-import glo
 from acquire.acquire_facility_factory import get_facilities_connected, get_facility,install as install_facility
+from glo import logger,app_conf
 from image.image_service import get_image_handler
 
 class ImageAcquire:
@@ -32,12 +32,10 @@ class ImageAcquire:
     playable = False
     image_handler = None
 
-    _run = True
-
     def _do_play(self):
         if self.playable:
             self.playable = False
-            glo.logger.debug('Acquire with {}'.format(self.product_name))
+            logger.debug('Acquire with {}'.format(self.product_name))
             fi = self.facility.get_connected(self.product_name)
             fi.set_batch_finished(lambda: emit_message_buffer.over())
             fi.set_failure_callback(lambda: emit_message_buffer.failure('10050','扫描仪异常，请查检设备'))
@@ -107,7 +105,7 @@ class EmitMessageBuffer:
     _buffer = Queue(maxsize=5000)
 
     def put(self, on, data):
-        glo.logger.debug("Put a messsage {} to Buffer on {}".format(data,on))
+        logger.debug("Put a messsage {} to Buffer on {}".format(data,on))
         self._buffer.put_nowait(EmitMessage(on=on, data=data))
 
     def over(self):
@@ -130,7 +128,7 @@ install_facility()
 
 emit_message_buffer = EmitMessageBuffer()
 
-flask_conf = glo.app_conf['flask']
+flask_conf = app_conf['flask']
 
 app = Flask(__name__, static_folder=flask_conf['static_folder'])
 socketio = SocketIO(app, cors_allowed_origins="*")
@@ -149,10 +147,10 @@ def task_flaskio_emit():
         try:
             msg = emit_message_buffer.get()
         except:
-            # glo.logger.warn("Not any more emit message! ")
+            # logger.warn("Not any more emit message! ")
             continue
 
-        glo.logger.debug("Emit message %s", msg, exc_info=1)
+        logger.debug("Emit message %s", msg, exc_info=1)
         if msg.namespace:
             socketio.emit(msg.on, msg.data, namespace=msg.namespace)
         else:
@@ -178,7 +176,7 @@ def shutdown():
 
 def batch_acquire_finished():
     """批量采集完成回调函数"""
-    glo.logger.debug('A batch acquire is over ')
+    logger.debug('A batch acquire is over ')
     emit_message_buffer.over()
 
 
@@ -212,9 +210,9 @@ def retruns_failure(code='-1',message='操作失败'):
 
 @socketio.on_error_default
 def default_error_handler(e):
-    glo.logger.debug('Scoket Error message %s',
+    logger.debug('Scoket Error message %s',
                  request.event["message"], exc_info=1)
-    glo.logger.debug('Scoket Error args %s', request.event["args"], exc_info=1)
+    logger.debug('Scoket Error args %s', request.event["args"], exc_info=1)
 
 
 @app.route('/acquire/facilities', methods=['GET'])
@@ -224,7 +222,7 @@ def list_facilities():
     Returns:
         a json as [{'facility_name':['F1','F2']}]
     """
-    glo.logger.debug('Url: /acquire/facilities Method=GET')
+    logger.debug('Url: /acquire/facilities Method=GET')
     return retruns_success(get_facilities_connected())
 
 
@@ -238,11 +236,11 @@ def connect_to_online_facility(facility,product_name):
     Returns:
         a json as {'success':True, 'data':None}
     """
-    glo.logger.debug('Url: /acquire/connect/{}/{} Method=GET'.format(facility,product_name))
+    logger.debug('Url: /acquire/connect/{}/{} Method=GET'.format(facility,product_name))
 
     facility_factory = get_facility(facility)
     acquire.set_facility(facility_factory,product_name=product_name)
-    glo.logger.debug('Get %s success', product_name, exc_info=1)
+    logger.debug('Get %s success', product_name, exc_info=1)
     return retruns_success()
 
 
@@ -257,7 +255,7 @@ def close_facility(facility, product_name):
         a json as {'success':True, 'data':None} if success 
         else {'success':False, 'message':'操作失败', 'code':-1}
     """
-    glo.logger.debug('Url: /acquire/close/{}/{} Method=GET'.format(facility,product_name))
+    logger.debug('Url: /acquire/close/{}/{} Method=GET'.format(facility,product_name))
     if acquire.same_product_of(facility,product_name):
         acquire.close()
         return retruns_success()
@@ -276,7 +274,7 @@ def facility_status(facility,product_name):
     Returns:
         a json as [{'facility_name':['F1','F2']}]
     """    
-    glo.logger.debug('acquire facility status ')
+    logger.debug('acquire facility status ')
     return retruns_success(acquire.get_status())
 
 @app.route('/acquire/image/<path:file_name>', methods=['GET'])
@@ -286,13 +284,13 @@ def show_image(file_name):
     Args:
         file_name: 图片相对路径，如20191125085018/s1/1.jpg
     """
-    glo.logger.debug('Url: /acquire/image/{} Method=GET'.format(file_name))
-    root_dir = glo.app_conf['scan']['root_dir']
+    logger.debug('Url: /acquire/image/{} Method=GET'.format(file_name))
+    root_dir = app_conf['scan']['root_dir']
     
     path = file_name[0:file_name.rindex('/')]
     file = file_name[len(path)+1:len(file_name)]
     absolute_path = os.path.join(root_dir,path)
-    glo.logger.debug('Image {}/{}'.format(absolute_path,file))
+    logger.debug('Image {}/{}'.format(absolute_path,file))
     return send_from_directory(absolute_path,file) 
 
 @socketio.on('acquire')
@@ -302,7 +300,7 @@ def acquire_image(data):
     Args:
         data: dict of {'operator':'operator_name',batch_id:'1'}
     """
-    glo.logger.debug("Websocket acquire image by %s", data, exc_info=1)
+    logger.debug("Websocket acquire image by %s", data, exc_info=1)
     handler = get_image_handler(data)
     handler.set_image_writed(image_acquired)
     acquire.play(image_handler=handler)
@@ -310,9 +308,9 @@ def acquire_image(data):
 
 @socketio.on('connect')
 def websocket_connect():
-    glo.logger.debug("Websocket connected ")
+    logger.debug("Websocket connected ")
 
 
 @socketio.on('disconnect')
 def websocket_disconnect():
-    glo.logger.debug("Websocket disconnected ")
+    logger.debug("Websocket disconnected ")

@@ -1,5 +1,3 @@
-from concurrent.futures import ProcessPoolExecutor 
-
 import unittest
 from unittest import TestCase
 
@@ -33,10 +31,13 @@ class TestScannerFactory(TestCase):
         scanner = scannerFactory.get_connected(scanners[0])
         scanner.set_failure_callback(lambda : logger.debug("Test failure"))
         scanner.set_batch_finished(lambda : logger.debug("Test batch finished"))
-        try:
+        def do_play():
+            logger.debug('Do scan')
             t = Total()
             scanner.play(image_handler = get_image_handler({}))
             logger.debug(t.total)
+        try:
+            do_play()
         finally:
             scannerFactory.terminate()
         # scanner = Scanner({})
